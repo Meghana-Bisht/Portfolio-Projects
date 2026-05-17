@@ -1,0 +1,185 @@
+-- DATA CLEANING
+
+SELECT *
+FROM layoffs;
+
+-- 1. Remove Duplicates if any
+-- 2. Standardize the data
+-- 3. Null or blank values
+-- 4. Remove any columns if not required
+
+# 1. Remove Duplicates if any -----------------------
+
+# Creating a duplicate table to unaffect the raw table which can be required later
+--
+CREATE TABLE layoffs_staging
+LIKE layoffs;
+SELECT *
+FROM layoffs_staging;
+INSERT layoffs_staging
+SELECT * 
+FROM layoffs;
+--
+SELECT *, 
+row_number() 
+OVER(PARTITION BY company, industry, total_laid_off, percentage_laid_off, `date`) AS row_num
+FROM layoffs_staging;
+
+WITH duplicate_cte AS
+(
+SELECT *, 
+row_number() 
+OVER(PARTITION BY company, location, industry, total_laid_off, percentage_laid_off, `date`, stage, country, funds_raised_millions) AS row_num
+FROM layoffs_staging
+)
+SELECT *
+FROM duplicate_cte
+WHERE row_num > 1;
+
+SELECT *
+FROM layoffs_staging
+WHERE company = 'Casper';
+
+WITH duplicate_cte AS
+(
+SELECT *, 
+row_number() 
+OVER(PARTITION BY company, location, industry, total_laid_off, percentage_laid_off, `date`, stage, country, funds_raised_millions) AS row_num
+FROM layoffs_staging
+)
+DELETE
+FROM duplicate_cte
+WHERE row_num > 1;
+
+CREATE TABLE `layoffs_staging2` (
+`company` text,
+`location`text,
+`industry`text,
+`total_laid_off` INT DEFAULT NULL,
+`percentage_laid_off` text,
+`date` text,
+`stage`text,
+`country` text,
+`funds_raised_millions` INT DEFAULT NULL,
+row_num INT
+);
+SELECT *
+FROM layoffs_staging2
+WHERE row_num > 1;
+
+INSERT INTO layoffs_staging2
+SELECT *, 
+row_number() 
+OVER(PARTITION BY company, location, industry, total_laid_off, percentage_laid_off, `date`, stage, country, funds_raised_millions) AS row_num
+FROM layoffs_staging;
+
+DELETE
+FROM layoffs_staging2
+WHERE row_num > 1;
+
+SELECT *
+FROM layoffs_staging2
+;
+
+-- 2. Standardizing data
+
+SELECT company, TRIM(company) #TRIM takes the white spaces from the comapanies name
+FROM layoffs_staging2
+;
+
+UPDATE layoffs_staging2
+SET company = TRIM(company);
+
+# Update Industry crypto currency
+SELECT *
+FROM layoffs_staging2
+WHERE industry LIKE 'Crypto%';
+
+UPDATE layoffs_staging2
+SET industry = 'Crypto'
+WHERE industry LIKE 'Crypto%';
+
+SELECT DISTINCT industry
+FROM layoffs_staging2;
+
+# Check for location/country
+SELECT DISTINCT country, TRIM(TRAILING '.' FROM country) #advance trim
+FROM layoffs_staging2
+order by 1;
+
+UPDATE layoffs_staging2
+SET country = TRIM(TRAILING '.' FROM country)
+WHERE country LIKE 'United States%'
+;
+# Update date type
+
+SELECT `date`,
+str_to_date(`date`, '%m/%d/%Y')
+FROM layoffs_staging2;
+
+UPDATE layoffs_staging2
+SET `date` = str_to_date(`date`, '%m/%d/%Y');
+
+ALTER TABLE layoffs_staging2
+MODIFY COLUMN `date` DATE;
+
+SELECT *
+FROM layoffs_staging2;
+
+-- 3. NULL OR BLANK VALUES
+
+SELECT *
+FROM layoffs_staging2
+WHERE total_laid_off IS NULL AND percentage_laid_off IS NULL;
+
+UPDATE layoffs_staging2
+SET industry = null
+WHERE industry = '';
+
+SELECT *
+FROM layoffs_staging2
+WHERE industry IS NULL OR industry = '';
+
+# for Bally company
+SELECT *
+FROM layoffs_staging2
+WHERE company LIKE 'Bally%';
+
+# For Airbnb company
+SELECT *
+FROM layoffs_staging2
+WHERE company = 'Airbnb';
+
+SELECT  t1.company, t1.industry, t2.industry
+FROM layoffs_staging2 t1
+JOIN layoffs_staging2 t2
+	ON t1.company = t2.company 
+    AND t1.location = t2.location
+WHERE (t1.industry IS NULL OR t1.industry = '')
+AND t2.industry IS NOT NULL;
+
+UPDATE layoffs_staging2 t1
+JOIN layoffs_staging2 t2
+	ON t1.company = t2.company
+SET t1.industry = t2.industry
+WHERE t1.industry IS NULL
+AND t2.industry IS NOT NULL;
+
+SELECT *
+FROM layoffs_staging2 ORDER BY 1;
+
+-- 4. Remove columns or rows which are not required
+
+SELECT *
+FROM layoffs_staging2
+WHERE total_laid_off IS NULL AND percentage_laid_off IS NULL;
+
+DELETE
+FROM layoffs_staging2
+WHERE total_laid_off IS NULL AND percentage_laid_off IS NULL;
+
+SELECT *
+FROM layoffs_staging2;
+
+ALTER TABLE layoffs_staging2
+DROP COLUMN row_num;
